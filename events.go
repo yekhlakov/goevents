@@ -1,55 +1,53 @@
 package goevents
 
-import (
-    "reflect"
-)
-
+// The event type accepted by event handlers
 type Event struct {
-    Name    string
-    Payload interface{}
+	Name    string
+	Payload interface{}
 }
 
-type Dispatcher struct {
-    isStarted bool
-    Queue    chan Event
-    Handlers map[string][]func(Event) error
+// The dispatcher instance
+var dispatcher struct {
+	Queue    chan Event
+	Handlers map[string][]func(Event) error
 }
 
-func getType(x interface{}) string {
-    return reflect.TypeOf(x).String()
+// package initialization
+func init() {
+
+	dispatcher.Queue = make(chan Event, 10)
+	dispatcher.Handlers = make(map[string][]func(Event) error)
+
+	go func() {
+		for {
+			event := <-dispatcher.Queue
+
+			for _, handler := range dispatcher.Handlers[event.Name] {
+				_ = handler(event)
+			}
+		}
+	}()
 }
 
-var dispatcher = Dispatcher{
-    isStarted: false,
-    Queue:    make(chan Event, 10),
-    Handlers: make(map[string][]func(Event) error),
-}
-
+// Register an event handler
 func RegisterHandler(name string, handler func(Event) error) {
-
-    dispatcher.Handlers[name] = append(dispatcher.Handlers[name], handler)
-
+	dispatcher.Handlers[name] = append(dispatcher.Handlers[name], handler)
 }
 
+// Post an event
 func Post(name string, payload interface{}) {
-    if dispatcher.Handlers[name] == nil {
-        return
-    }
+	if dispatcher.Handlers[name] == nil {
+		return
+	}
 
-    if !dispatcher.isStarted {
-        go execute()
-    }
-
-    dispatcher.Queue <- Event{name, payload}
+	dispatcher.Queue <- Event{name, payload}
 }
 
-func execute() []error {
+// Post an event (as an object)
+func PostEvent(event Event) {
+	if dispatcher.Handlers[event.Name] == nil {
+		return
+	}
 
-    for {
-        event := <-dispatcher.Queue
-
-        for _, handler := range dispatcher.Handlers[event.Name] {
-            _ = handler(event)
-        }
-    }
+	dispatcher.Queue <- event
 }
